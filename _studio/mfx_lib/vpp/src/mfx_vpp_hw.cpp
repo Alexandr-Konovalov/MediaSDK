@@ -2984,6 +2984,43 @@ bool VideoVPPHW::UseCopyPassThrough(const DdiTask *pTask) const
     return vaapiCore->CmCopy();
 }
 
+mfxStatus VideoVPPHW::CheckSurfaceContinuouslyAllocated(mfxFrameSurface1 *surf)
+{
+    bool isDstLocked = false;
+    mfxFrameData frameData, *ptrFrameData;
+
+    memset(&frameData, 0, sizeof(mfxFrameData));
+    if (surf->Data.Y)
+    {
+        ptrFrameData = &surf->Data;
+    } else
+    {
+        MFX_SAFE_CALL(m_pCore->LockExternalFrame(surf->Data.MemId, &frameData));
+        ptrFrameData = &frameData;
+
+        isDstLocked = true;
+    }
+
+    switch (surf->Info.FourCC)
+    {
+    // TODO: support other
+    case MFX_FOURCC_NV12:
+        mfxU32 stride_in_bytes = ptrFrameData->PitchLow + ((mfxU32)ptrFrameData->PitchHigh << 16);
+        size_t totalBufferUPSize = stride_in_bytes * VPP_ALIGN32(surf->Info.Height)
+            + stride_in_bytes * surf->Info.Height/2;
+        if (ptrFrameData->UV + stride_in_bytes * surf->Info.Height/2 > ptrFrameData->Y + totalBufferUPSize)
+            return MFX_ERR_INVALID_VIDEO_PARAM;
+        break;
+    }
+
+    if (isDstLocked)
+    {
+        MFX_SAFE_CALL(m_pCore->UnlockExternalFrame(surf->Data.MemId, &frameData));
+    }
+
+    return MFX_ERR_NONE;
+}
+
 mfxStatus VideoVPPHW::VppFrameCheck(
                                     mfxFrameSurface1 *input,
                                     mfxFrameSurface1 *output,
@@ -3138,6 +3175,31 @@ mfxStatus VideoVPPHW::VppFrameCheck(
     MFX_CHECK_STS(sts);
 
     bool useCopyPassThrough = UseCopyPassThrough(pTask);
+
+    if ((SYS_TO_D3D == m_ioMode && useCopyPassThrough) ||
+        ((SYS_TO_D3D == m_ioMode || SYS_TO_SYS == m_ioMode) &&
+         (MFX_MIRRORING_HORIZONTAL == m_executeParams.mirroring &&
+          MIRROR_INPUT == m_executeParams.mirroringPosition)))
+    {
+        mfxStatus sts = CheckSurfaceContinuouslyAllocated(input);
+        if (sts != MFX_ERR_NONE)
+        {
+            m_taskMngr.CompleteTask(pTask);
+            MFX_RETURN(sts);
+        }
+    }
+    if (D3D_TO_SYS == m_ioMode &&
+        (useCopyPassThrough ||
+         (MFX_MIRRORING_HORIZONTAL == m_executeParams.mirroring &&
+          MIRROR_OUTPUT == m_executeParams.mirroringPosition)))
+    {
+        mfxStatus sts = CheckSurfaceContinuouslyAllocated(output);
+        if (sts != MFX_ERR_NONE)
+        {
+            m_taskMngr.CompleteTask(pTask);
+            MFX_RETURN(sts);
+        }
+    }
 
     if (VPP_SYNC_WORKLOAD == m_workloadMode)
     {

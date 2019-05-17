@@ -910,6 +910,8 @@ namespace MfxHwVideoProcessing
 
         bool UseCopyPassThrough(const DdiTask *pTask) const;
 
+        mfxStatus CheckSurfaceContinuouslyAllocated(mfxFrameSurface1 *s);
+
         mfxStatus PreWorkOutSurface(ExtSurface & output);
         mfxStatus PreWorkInputSurface(std::vector<ExtSurface> & surfQueue);
 
