@@ -1500,7 +1500,7 @@ void LookAheadBrc2::GetQp(const BRCFrameParams& par, mfxBRCFrameCtrl &frameCtrl)
     else
         ; // do not change qp if last qp guarantees target rate interval
     mfxU32 ind = GetFrameTypeIndex(par.FrameType);
-    m_curQp = mfx::clamp<mfxI32>(m_curBaseQp + m_laData[m_first].deltaQp, m_QPMin[ind], m_QPMax[ind]);
+    m_curQp = mfx::clamp<mfxI32>(m_curBaseQp + (m_laData.size()? m_laData[m_first].deltaQp : 0), m_QPMin[ind], m_QPMax[ind]);
 
     //printf("bqp=%2d qp=%2d dqp=%2d erate=%7.3f ", m_curBaseQp, m_curQp, m_laData[0].deltaQp, m_laData[0].estRateTotal[m_curQp]);
 
